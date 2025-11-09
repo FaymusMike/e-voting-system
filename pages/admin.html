@@ -14,21 +14,32 @@
     <link rel="stylesheet" href="../assets/css/styles.css">
 </head>
 <body>
-    <div id="authCheck">
-        <div class="container mt-5">
-            <div class="alert alert-warning text-center">
-                <h4>Checking Authentication...</h4>
+    <div id="authCheck" class="min-vh-100 d-flex align-items-center justify-content-center">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body text-center p-5">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <h4>Checking Admin Authentication...</h4>
+                            <p class="text-muted">Please wait while we verify your credentials.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="container-fluid mt-4" id="adminContent" style="display: none;">
+    <div class="container-fluid" id="adminContent" style="display: none;">
         <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
             <div class="container">
                 <a class="navbar-brand" href="../index.html">
                     <i class="fas fa-vote-yea me-2"></i>SecureVote Admin
                 </a>
                 <div class="navbar-nav ms-auto">
+                    <span class="navbar-text me-3" id="adminWelcome">Welcome, Admin</span>
                     <button class="btn btn-outline-light btn-sm" id="adminLogoutBtn">Logout</button>
                 </div>
             </div>
@@ -142,6 +153,7 @@
                                             <th>Voter ID</th>
                                             <th>Name</th>
                                             <th>Email</th>
+                                            <th>Role</th>
                                             <th>Voting Status</th>
                                             <th>Registration Date</th>
                                         </tr>

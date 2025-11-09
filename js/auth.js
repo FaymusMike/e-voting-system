@@ -1,4 +1,4 @@
-// js/auth.js - UPDATED WITH BETTER ERROR HANDLING
+// js/auth.js - UPDATED WITH ROLE-BASED REDIRECTS
 import { auth, db } from './firebase-config.js';
 import { 
     createUserWithEmailAndPassword, 
@@ -31,7 +31,7 @@ export async function registerVoter(email, password, voterData) {
             fullName: voterData.fullName,
             email: email,
             voterId: voterData.voterId,
-            role: 'voter', // 👈 ADDED: Role differentiation
+            role: 'voter', // Default role
             faceData: voterData.faceData || null,
             biometricKey: voterData.biometricKey || null,
             hasVoted: false,
@@ -60,7 +60,7 @@ export async function registerVoter(email, password, voterData) {
     }
 }
 
-// Login function with better error handling
+// Login function with role-based redirects
 export async function loginVoter(email, password) {
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -69,14 +69,20 @@ export async function loginVoter(email, password) {
         // Get user role from Firestore
         const userData = await getVoterData(user.uid);
         if (userData.success) {
+            const role = userData.data.role || 'voter';
+            const fullName = userData.data.fullName || 'User';
+            
+            console.log('Login successful. Role:', role);
+            
             return { 
                 success: true, 
                 user: user,
-                role: userData.data.role || 'voter' // 👈 INCLUDES ROLE
+                role: role,
+                fullName: fullName
             };
         }
         
-        return { success: true, user: user, role: 'voter' };
+        return { success: true, user: user, role: 'voter', fullName: 'User' };
         
     } catch (error) {
         console.error('Login error:', error);
@@ -88,6 +94,8 @@ export async function loginVoter(email, password) {
             errorMessage = 'Incorrect password. Please try again.';
         } else if (error.code === 'auth/invalid-email') {
             errorMessage = 'Invalid email address.';
+        } else if (error.code === 'auth/too-many-requests') {
+            errorMessage = 'Too many failed attempts. Please try again later.';
         }
         
         return { success: false, error: errorMessage };
@@ -106,8 +114,15 @@ export async function logoutUser() {
 
 // Check auth state
 export function checkAuthState(callback) {
-    onAuthStateChanged(auth, (user) => {
-        callback(user);
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // Get user role for callback
+            const userData = await getVoterData(user.uid);
+            const role = userData.success ? (userData.data.role || 'voter') : 'voter';
+            callback(user, role);
+        } else {
+            callback(null, null);
+        }
     });
 }
 
@@ -140,8 +155,6 @@ export async function updateVoteStatus(userId) {
         return { success: false, error: error.message };
     }
 }
-
-// 👇 **NEW: Role-based Access Control Functions**
 
 // Check if user is admin
 export async function isAdmin(userId) {
@@ -179,5 +192,18 @@ export async function getUserRole(userId) {
         return 'voter';
     } catch (error) {
         return 'voter';
+    }
+}
+
+// Redirect user based on role
+export function redirectBasedOnRole(role, fullName = 'User') {
+    if (role === 'admin') {
+        // Store admin info in session storage
+        sessionStorage.setItem('adminName', fullName);
+        window.location.href = 'pages/admin.html';
+    } else {
+        // Store voter info in session storage
+        sessionStorage.setItem('voterName', fullName);
+        window.location.href = 'pages/vote.html';
     }
 }

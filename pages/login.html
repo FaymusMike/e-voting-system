@@ -27,7 +27,7 @@
             <div class="col-md-6">
                 <div class="card">
                     <div class="card-header bg-primary text-white">
-                        <h4 class="mb-0">Voter Login</h4>
+                        <h4 class="mb-0">Login to SecureVote</h4>
                     </div>
                     <div class="card-body">
                         <form id="loginForm">
@@ -40,15 +40,18 @@
                                 <input type="password" class="form-control" id="loginPassword" required>
                             </div>
                             
-                            <button type="submit" class="btn btn-primary w-100 mb-3">Login</button>
+                            <button type="submit" class="btn btn-primary w-100 mb-3">
+                                <i class="fas fa-sign-in-alt me-2"></i>Login
+                            </button>
                         </form>
 
                         <div class="text-center mt-3">
                             <p>Don't have an account? <a href="register.html">Register here</a></p>
+                            <p class="small text-muted">Admin access? <a href="admin-register.html">Create admin account</a></p>
                         </div>
 
                         <hr>
-                        <h5 class="text-center">Biometric Authentication</h5>
+                        <h5 class="text-center">Alternative Login Methods</h5>
                         
                         <div class="text-center mb-4">
                             <button id="faceLogin" class="btn btn-outline-primary me-2">
@@ -79,7 +82,7 @@
     <script type="module" src="../js/biometric-simple.js"></script>
     
     <script type="module">
-        import { loginVoter } from '../js/auth.js';
+        import { loginVoter, redirectBasedOnRole } from '../js/auth.js';
         import { startCamera, captureFace } from '../js/face-simple.js';
         
         // Handle form login
@@ -89,12 +92,29 @@
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
             
-            const result = await loginVoter(email, password);
-            if (result.success) {
-                alert('Login successful! Redirecting...');
-                window.location.href = 'vote.html';
-            } else {
-                alert('Login failed: ' + result.error);
+            if (!email || !password) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            const loginBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = loginBtn.innerHTML;
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Logging in...';
+            loginBtn.disabled = true;
+            
+            try {
+                const result = await loginVoter(email, password);
+                if (result.success) {
+                    // Redirect based on role
+                    redirectBasedOnRole(result.role, result.fullName);
+                } else {
+                    alert('Login failed: ' + result.error);
+                }
+            } catch (error) {
+                alert('Login error: ' + error.message);
+            } finally {
+                loginBtn.innerHTML = originalText;
+                loginBtn.disabled = false;
             }
         });
         
@@ -115,8 +135,8 @@
         document.getElementById('verifyFace').addEventListener('click', async () => {
             try {
                 await captureFace();
-                alert('Face verification successful! Redirecting to voting...');
-                window.location.href = 'vote.html';
+                alert('Face verification successful! For demo, redirecting as voter.');
+                redirectBasedOnRole('voter', 'Demo User');
             } catch (error) {
                 alert('Face verification failed: ' + error.message);
             }
@@ -124,8 +144,8 @@
         
         // Handle biometric login
         document.getElementById('biometricLogin').addEventListener('click', async () => {
-            alert('Biometric login would be implemented here. For demo, redirecting to vote page.');
-            window.location.href = 'vote.html';
+            alert('Biometric login would be implemented here. For demo, redirecting as voter.');
+            redirectBasedOnRole('voter', 'Demo User');
         });
     </script>
 </body>
