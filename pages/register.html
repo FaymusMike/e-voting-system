@@ -112,14 +112,13 @@
     <script type="module" src="../js/auth.js"></script>
     <script type="module" src="../js/face-simple.js"></script>
     <script type="module" src="../js/biometric-simple.js"></script>
-    
+
     <script type="module">
         import { registerVoter } from '../js/auth.js';
         import { startCamera, captureFace } from '../js/face-simple.js';
         
         let isCameraStarted = false;
         
-        // In register.html - UPDATE FORM HANDLER
         document.getElementById('registrationForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -127,8 +126,10 @@
             const password = document.getElementById('password').value;
             const fullName = document.getElementById('fullName').value;
             const voterId = document.getElementById('voterId').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
             
-            if (password !== document.getElementById('confirmPassword').value) {
+            // Validation
+            if (password !== confirmPassword) {
                 alert('Passwords do not match!');
                 return;
             }
@@ -138,17 +139,36 @@
                 return;
             }
             
-            const voterData = {
-                fullName: fullName,
-                voterId: voterId
-            };
+            if (!email || !password || !fullName || !voterId) {
+                alert('Please fill in all required fields.');
+                return;
+            }
             
-            const result = await registerVoter(email, password, voterData);
-            if (result.success) {
-                alert('Registration successful! You can now login.');
-                window.location.href = 'login.html';
-            } else {
-                alert('Registration failed: ' + result.error);
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Registering...';
+            submitBtn.disabled = true;
+            
+            try {
+                const voterData = {
+                    fullName: fullName,
+                    voterId: voterId
+                };
+                
+                const result = await registerVoter(email, password, voterData);
+                if (result.success) {
+                    alert('Registration successful! You can now login.');
+                    // FIXED: Use correct relative path
+                    window.location.href = './login.html';
+                } else {
+                    alert('Registration failed: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                alert('Registration error: ' + error.message);
+            } finally {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
             }
         });
         
@@ -183,5 +203,7 @@
             }
         });
     </script>
+    
+    
 </body>
 </html>

@@ -15,7 +15,7 @@ import {
     getDocs
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
-// Registration function with better error handling
+// Registration function - FIXED REDIRECT
 export async function registerVoter(email, password, voterData) {
     try {
         console.log('Attempting to register:', email);
@@ -31,7 +31,7 @@ export async function registerVoter(email, password, voterData) {
             fullName: voterData.fullName,
             email: email,
             voterId: voterData.voterId,
-            role: 'voter', // Default role
+            role: 'voter',
             faceData: voterData.faceData || null,
             biometricKey: voterData.biometricKey || null,
             hasVoted: false,
