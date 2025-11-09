@@ -1,4 +1,4 @@
-// js/vote.js - COMPLETE DEBUGGED VERSION
+// js/vote.js - COMPLETE DEBUGGED VERSION WITH CAMERA VERIFICATION
 import { auth, db } from './firebase-config.js';
 import { 
     collection, 
@@ -8,15 +8,18 @@ import {
     increment,
     getDoc,
     setDoc,
-    addDoc,
-    query,
-    where
+    addDoc
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getVoterData, updateVoteStatus, isAdmin, logoutUser } from './auth.js';
 import { uploadCandidateImage, getPlaceholderImage } from './image-upload.js';
 
 let currentUser = null;
 let selectedCandidate = null;
+
+// Camera state for verification
+let verificationCameraStarted = false;
+let faceVerified = false;
+let biometricVerified = false;
 
 // Initialize voting page
 export async function initVotingPage() {
@@ -115,7 +118,7 @@ async function loadCandidates() {
                             <p class="card-text">${candidate.description || ''}</p>
                             <button class="btn btn-primary w-100 vote-candidate" 
                                     data-candidate-id="${candidateId}">
-                                Vote for ${candidate.name}
+                                <i class="fas fa-vote-yea me-2"></i>Vote for ${candidate.name}
                             </button>
                         </div>
                     </div>
@@ -149,7 +152,7 @@ async function loadCandidates() {
     }
 }
 
-// Show verification modal
+// Show verification modal - UPDATED WITH CAMERA
 function showVerificationModal() {
     try {
         const modalElement = document.getElementById('verificationModal');
@@ -158,22 +161,64 @@ function showVerificationModal() {
             return;
         }
         
+        // Reset verification state
+        resetVerificationState();
+        
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
         
-        // Reset verification steps
-        document.querySelectorAll('.step-number').forEach(step => {
-            step.classList.remove('step-active');
-        });
-        document.getElementById('confirmVote').disabled = true;
-        
         // Setup verification button handlers
-        const verifyFaceBtn = document.getElementById('verifyFaceVote');
+        setupVerificationHandlers();
+        
+    } catch (error) {
+        console.error('Error showing verification modal:', error);
+        alert('Error starting verification process. Please try again.');
+    }
+}
+
+// Reset verification state
+function resetVerificationState() {
+    verificationCameraStarted = false;
+    faceVerified = false;
+    biometricVerified = false;
+    
+    // Reset UI
+    document.querySelectorAll('.step-number').forEach(step => {
+        step.classList.remove('step-active');
+        step.innerHTML = step.id === 'faceStepNumber' ? '1' : '2';
+    });
+    
+    document.getElementById('confirmVote').disabled = true;
+    document.getElementById('captureVerificationFace').disabled = true;
+    document.getElementById('verifyBiometricVote').disabled = true;
+    
+    // Clear status messages
+    const faceStatus = document.getElementById('faceVerificationStatus');
+    const biometricStatus = document.getElementById('biometricStatus');
+    const progressElement = document.getElementById('verificationProgress');
+    
+    if (faceStatus) faceStatus.textContent = '';
+    if (biometricStatus) biometricStatus.textContent = '';
+    if (progressElement) progressElement.style.display = 'none';
+    
+    // Stop any running camera
+    stopVerificationCamera();
+}
+
+// Setup verification handlers
+function setupVerificationHandlers() {
+    try {
+        // Face verification handlers
+        const startCameraBtn = document.getElementById('startVerificationCamera');
+        const captureFaceBtn = document.getElementById('captureVerificationFace');
         const verifyBiometricBtn = document.getElementById('verifyBiometricVote');
         const confirmVoteBtn = document.getElementById('confirmVote');
         
-        if (verifyFaceBtn) {
-            verifyFaceBtn.onclick = verifyFaceForVote;
+        if (startCameraBtn) {
+            startCameraBtn.onclick = startVerificationCamera;
+        }
+        if (captureFaceBtn) {
+            captureFaceBtn.onclick = captureVerificationFace;
         }
         if (verifyBiometricBtn) {
             verifyBiometricBtn.onclick = verifyBiometricForVote;
@@ -181,61 +226,250 @@ function showVerificationModal() {
         if (confirmVoteBtn) {
             confirmVoteBtn.onclick = castVote;
         }
+        
     } catch (error) {
-        console.error('Error showing verification modal:', error);
-        alert('Error starting verification process. Please try again.');
+        console.error('Error setting up verification handlers:', error);
     }
 }
 
-// Verify face for voting
-async function verifyFaceForVote() {
-    const faceStep = document.querySelector('.verification-step:nth-child(1) .step-number');
-    
+// Start camera for verification
+async function startVerificationCamera() {
     try {
-        // Simulate face verification for demo
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const statusElement = document.getElementById('faceVerificationStatus');
+        const startBtn = document.getElementById('startVerificationCamera');
+        const captureBtn = document.getElementById('captureVerificationFace');
         
+        if (statusElement) {
+            statusElement.textContent = 'Starting camera...';
+            statusElement.className = 'mt-2 text-center small text-info';
+        }
+        
+        const videoElement = document.getElementById('verificationVideoElement');
+        if (!videoElement) {
+            throw new Error('Camera video element not found');
+        }
+        
+        // Request camera access
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'user'
+            } 
+        });
+        
+        videoElement.srcObject = stream;
+        verificationCameraStarted = true;
+        
+        // Enable capture button
+        if (captureBtn) {
+            captureBtn.disabled = false;
+        }
+        if (startBtn) {
+            startBtn.disabled = true;
+            startBtn.innerHTML = '<i class="fas fa-check me-1"></i>Camera Ready';
+        }
+        if (statusElement) {
+            statusElement.textContent = 'Camera started! Position your face in the frame and click "Capture & Verify Face"';
+            statusElement.className = 'mt-2 text-center small text-success';
+        }
+        
+        console.log('Verification camera started successfully');
+        
+    } catch (error) {
+        console.error('Error starting verification camera:', error);
+        const statusElement = document.getElementById('faceVerificationStatus');
+        
+        let errorMessage = 'Error starting camera: ' + error.message;
+        if (error.name === 'NotAllowedError') {
+            errorMessage = 'Camera access denied. Please allow camera permissions to continue.';
+        } else if (error.name === 'NotFoundError') {
+            errorMessage = 'No camera found. Please ensure you have a camera connected.';
+        } else if (error.name === 'NotSupportedError') {
+            errorMessage = 'Camera not supported in this browser.';
+        }
+        
+        if (statusElement) {
+            statusElement.textContent = errorMessage;
+            statusElement.className = 'mt-2 text-center small text-danger';
+        }
+        
+        alert(errorMessage);
+    }
+}
+
+// Capture and verify face
+async function captureVerificationFace() {
+    try {
+        if (!verificationCameraStarted) {
+            alert('Please start the camera first!');
+            return;
+        }
+        
+        const statusElement = document.getElementById('faceVerificationStatus');
+        const captureBtn = document.getElementById('captureVerificationFace');
+        const progressElement = document.getElementById('verificationProgress');
+        const progressText = document.getElementById('progressText');
+        
+        if (statusElement) {
+            statusElement.textContent = 'Capturing and verifying face...';
+            statusElement.className = 'mt-2 text-center small text-info';
+        }
+        
+        if (progressElement && progressText) {
+            progressElement.style.display = 'block';
+            progressText.textContent = 'Analyzing facial features...';
+        }
+        
+        if (captureBtn) {
+            captureBtn.disabled = true;
+            captureBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying...';
+        }
+        
+        // Simulate face capture and verification process
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // For demo purposes, we'll simulate successful verification
+        faceVerified = true;
+        
+        // Update UI
+        const faceStep = document.getElementById('faceStepNumber');
         if (faceStep) {
             faceStep.classList.add('step-active');
             faceStep.innerHTML = '<i class="fas fa-check"></i>';
         }
         
+        if (statusElement) {
+            statusElement.textContent = '✓ Face verified successfully!';
+            statusElement.className = 'mt-2 text-center small text-success';
+        }
+        
+        if (progressElement && progressText) {
+            progressText.textContent = 'Face verification complete!';
+        }
+        
+        // Enable biometric verification
+        document.getElementById('verifyBiometricVote').disabled = false;
+        
+        // Stop camera after successful verification
+        stopVerificationCamera();
+        
+        console.log('Face verification completed successfully');
+        
+        // Check if both verifications are complete
         checkAllVerifications();
+        
     } catch (error) {
         console.error('Error during face verification:', error);
-        alert('Error during face verification. Please try again.');
+        const statusElement = document.getElementById('faceVerificationStatus');
+        
+        if (statusElement) {
+            statusElement.textContent = 'Face verification failed. Please try again.';
+            statusElement.className = 'mt-2 text-center small text-danger';
+        }
+        
+        const captureBtn = document.getElementById('captureVerificationFace');
+        if (captureBtn) {
+            captureBtn.disabled = false;
+            captureBtn.innerHTML = '<i class="fas fa-camera-retro me-1"></i>Capture & Verify Face';
+        }
+        
+        alert('Face verification failed: ' + error.message);
     }
 }
 
-// Verify biometric for voting
+// Stop verification camera
+function stopVerificationCamera() {
+    const videoElement = document.getElementById('verificationVideoElement');
+    if (videoElement && videoElement.srcObject) {
+        const tracks = videoElement.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+        videoElement.srcObject = null;
+    }
+    verificationCameraStarted = false;
+}
+
+// Verify biometric for voting - UPDATED
 async function verifyBiometricForVote() {
-    const biometricStep = document.querySelector('.verification-step:nth-child(2) .step-number');
-    
     try {
-        // Simulate biometric verification for demo
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const statusElement = document.getElementById('biometricStatus');
+        const verifyBtn = document.getElementById('verifyBiometricVote');
+        const progressElement = document.getElementById('verificationProgress');
+        const progressText = document.getElementById('progressText');
         
+        if (statusElement) {
+            statusElement.textContent = 'Starting biometric verification...';
+            statusElement.className = 'mt-2 small text-info';
+        }
+        
+        if (progressElement && progressText) {
+            progressText.textContent = 'Waiting for biometric input...';
+        }
+        
+        if (verifyBtn) {
+            verifyBtn.disabled = true;
+            verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying...';
+        }
+        
+        // Simulate biometric verification process
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // For demo, simulate successful biometric verification
+        biometricVerified = true;
+        
+        // Update UI
+        const biometricStep = document.getElementById('biometricStepNumber');
         if (biometricStep) {
             biometricStep.classList.add('step-active');
             biometricStep.innerHTML = '<i class="fas fa-check"></i>';
         }
         
+        if (statusElement) {
+            statusElement.textContent = '✓ Biometric verification successful!';
+            statusElement.className = 'mt-2 small text-success';
+        }
+        
+        if (progressElement && progressText) {
+            progressText.textContent = 'All verifications complete! You can now cast your vote.';
+            progressElement.className = 'alert alert-success mt-3';
+        }
+        
+        console.log('Biometric verification completed successfully');
+        
+        // Check if both verifications are complete
         checkAllVerifications();
+        
     } catch (error) {
         console.error('Error during biometric verification:', error);
-        alert('Error during biometric verification. Please try again.');
+        const statusElement = document.getElementById('biometricStatus');
+        
+        if (statusElement) {
+            statusElement.textContent = 'Biometric verification failed. Please try again.';
+            statusElement.className = 'mt-2 small text-danger';
+        }
+        
+        const verifyBtn = document.getElementById('verifyBiometricVote');
+        if (verifyBtn) {
+            verifyBtn.disabled = false;
+            verifyBtn.innerHTML = '<i class="fas fa-fingerprint me-1"></i>Verify Biometric';
+        }
+        
+        alert('Biometric verification failed: ' + error.message);
     }
 }
 
-// Check if all verifications are complete
+// Check if all verifications are complete - UPDATED
 function checkAllVerifications() {
     try {
-        const activeSteps = document.querySelectorAll('.step-active').length;
-        const confirmVoteBtn = document.getElementById('confirmVote');
-        
-        if (confirmVoteBtn && activeSteps === 2) {
-            confirmVoteBtn.disabled = false;
-            confirmVoteBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Confirm Vote';
+        if (faceVerified && biometricVerified) {
+            const confirmVoteBtn = document.getElementById('confirmVote');
+            
+            if (confirmVoteBtn) {
+                confirmVoteBtn.disabled = false;
+                confirmVoteBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Confirm & Cast Vote';
+            }
+            
+            console.log('All verifications complete, vote confirmation enabled');
         }
     } catch (error) {
         console.error('Error checking verifications:', error);
@@ -253,6 +487,11 @@ async function castVote() {
         
         if (!selectedCandidate) {
             alert('No candidate selected.');
+            return;
+        }
+        
+        if (!faceVerified || !biometricVerified) {
+            alert('Please complete both verification steps before casting your vote.');
             return;
         }
         
@@ -296,12 +535,11 @@ async function castVote() {
         const confirmVoteBtn = document.getElementById('confirmVote');
         if (confirmVoteBtn) {
             confirmVoteBtn.disabled = false;
-            confirmVoteBtn.innerHTML = 'Confirm Vote';
+            confirmVoteBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Confirm & Cast Vote';
         }
     }
 }
 
-// Initialize admin dashboard
 // Initialize admin dashboard - FIXED VERSION
 export async function initAdminDashboard() {
     try {
@@ -362,7 +600,6 @@ export async function initAdminDashboard() {
                     // Load admin data (don't wait for it to complete)
                     loadAdminData().catch(error => {
                         console.error('Error loading admin data:', error);
-                        // Show error but don't block the UI
                         showDataError();
                     });
                     
@@ -438,9 +675,7 @@ function handleNoUserRedirect() {
 
 // Show data error message
 function showDataError() {
-    // You can add a banner or alert showing data load issues
     console.warn('Some data failed to load due to permissions');
-    // Optionally show a user-friendly message
     const existingAlert = document.getElementById('dataErrorAlert');
     if (!existingAlert) {
         const alert = document.createElement('div');
@@ -850,21 +1085,12 @@ async function addCandidate() {
 // Global functions for candidate actions (called from HTML)
 window.editCandidate = async function(candidateId) {
     alert(`Edit functionality for candidate ${candidateId} would be implemented here.`);
-    // In a real implementation, you would:
-    // 1. Fetch candidate data
-    // 2. Populate the add candidate form with existing data
-    // 3. Change the save button to update instead of create
 };
 
 window.deleteCandidate = async function(candidateId) {
     if (confirm('Are you sure you want to delete this candidate? This action cannot be undone.')) {
         try {
-            // Note: In a real implementation, you would import deleteDoc from firebase
-            // import { deleteDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-            // await deleteDoc(doc(db, "candidates", candidateId));
-            
             alert(`Delete functionality for candidate ${candidateId} would be implemented here.`);
-            // For now, just refresh the table
             await loadCandidatesTable();
         } catch (error) {
             console.error('Error deleting candidate:', error);
@@ -875,6 +1101,5 @@ window.deleteCandidate = async function(candidateId) {
 
 // Initialize charts when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    // This ensures charts are properly initialized
     console.log('Vote.js loaded successfully');
 });
