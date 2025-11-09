@@ -119,6 +119,7 @@
         
         let isCameraStarted = false;
         
+        // In register.html - UPDATE FORM HANDLER
         document.getElementById('registrationForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -132,6 +133,11 @@
                 return;
             }
             
+            if (!document.getElementById('terms').checked) {
+                alert('Please agree to the terms and conditions');
+                return;
+            }
+            
             const voterData = {
                 fullName: fullName,
                 voterId: voterId
@@ -141,6 +147,8 @@
             if (result.success) {
                 alert('Registration successful! You can now login.');
                 window.location.href = 'login.html';
+            } else {
+                alert('Registration failed: ' + result.error);
             }
         });
         

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Registration - SecureVote</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="../index.html">
+                <i class="fas fa-vote-yea me-2"></i>SecureVote Admin Setup
+            </a>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h4 class="mb-0">Admin Registration</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning">
+                            <strong>Warning:</strong> This page is for creating administrator accounts only.
+                        </div>
+                        <form id="adminRegisterForm">
+                            <div class="mb-3">
+                                <label for="adminFullName" class="form-label">Full Name</label>
+                                <input type="text" class="form-control" id="adminFullName" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="adminEmail" class="form-label">Email Address</label>
+                                <input type="email" class="form-control" id="adminEmail" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="adminPassword" class="form-label">Password</label>
+                                <input type="password" class="form-control" id="adminPassword" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="adminSecret" class="form-label">Admin Secret Key</label>
+                                <input type="password" class="form-control" id="adminSecret" placeholder="Enter admin secret key" required>
+                            </div>
+                            <button type="submit" class="btn btn-danger w-100">Create Admin Account</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { auth, db } from '../js/firebase-config.js';
+        import { createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+        import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        document.getElementById('adminRegisterForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('adminEmail').value;
+            const password = document.getElementById('adminPassword').value;
+            const fullName = document.getElementById('adminFullName').value;
+            const secret = document.getElementById('adminSecret').value;
+            
+            // Simple secret key check (you can change this)
+            if (secret !== 'ADMIN2024') {
+                alert('Invalid admin secret key!');
+                return;
+            }
+            
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                
+                // Store admin data
+                await setDoc(doc(db, "voters", user.uid), {
+                    voterID: user.uid,
+                    fullName: fullName,
+                    email: email,
+                    voterId: 'ADMIN_' + Date.now(),
+                    role: 'admin',
+                    hasVoted: false,
+                    registrationDate: new Date().toISOString()
+                });
+                
+                alert('Admin account created successfully!');
+                window.location.href = 'admin.html';
+                
+            } catch (error) {
+                alert('Error creating admin: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>

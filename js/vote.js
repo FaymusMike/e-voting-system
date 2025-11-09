@@ -197,12 +197,18 @@ export async function initAdminDashboard() {
     
     auth.onAuthStateChanged(async (user) => {
         if (user) {
-            // For demo, we'll allow any authenticated user to access admin
-            // In production, you should check if user is actually admin
-            document.getElementById('authCheck').style.display = 'none';
-            document.getElementById('adminContent').style.display = 'block';
-            await loadAdminData();
-            setupAdminEventListeners();
+            // Check if user is actually admin
+            const userIsAdmin = await isAdmin(user.uid);
+            
+            if (userIsAdmin) {
+                document.getElementById('authCheck').style.display = 'none';
+                document.getElementById('adminContent').style.display = 'block';
+                await loadAdminData();
+                setupAdminEventListeners();
+            } else {
+                alert('Access denied. Admin privileges required.');
+                window.location.href = 'login.html';
+            }
         } else {
             alert('Please login to access admin panel.');
             window.location.href = 'login.html';
