@@ -8,9 +8,9 @@
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗳️</text></svg>">
     
-    <!-- Local CSS Files -->
-    <link href="../assets/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="../assets/css/fontawesome.min.css">
+    <!-- CDN CSS Files -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/styles.css">
 </head>
 <body>
@@ -70,11 +70,21 @@
                             <h5>Biometric Registration</h5>
                             
                             <div class="face-registration-container mb-4">
-                                <div class="video-container">
-                                    <video id="videoElement" width="500" height="375" autoplay></video>
+                                <div class="video-container mb-3">
+                                    <video id="videoElement" width="500" height="375" autoplay muted playsinline></video>
                                 </div>
-                                <button type="button" id="captureFace" class="btn btn-primary">Capture Face</button>
-                                <button type="button" id="registerBiometric" class="btn btn-success">Register Biometric</button>
+                                <div class="text-center">
+                                    <button type="button" id="startCamera" class="btn btn-primary me-2">
+                                        <i class="fas fa-camera me-1"></i>Start Camera
+                                    </button>
+                                    <button type="button" id="captureFace" class="btn btn-success me-2" disabled>
+                                        <i class="fas fa-camera-retro me-1"></i>Capture Face
+                                    </button>
+                                    <button type="button" id="registerBiometric" class="btn btn-warning" disabled>
+                                        <i class="fas fa-fingerprint me-1"></i>Register Biometric
+                                    </button>
+                                </div>
+                                <div id="cameraStatus" class="mt-2 text-center small text-muted"></div>
                             </div>
 
                             <div class="form-check mb-3">
@@ -87,7 +97,6 @@
                             <button type="submit" class="btn btn-primary w-100">Complete Registration</button>
                         </form>
                         
-                        <!-- Add login link -->
                         <div class="text-center mt-3">
                             <p>Already have an account? <a href="login.html">Login here</a></p>
                         </div>
@@ -97,17 +106,18 @@
         </div>
     </div>
 
-    <!-- Local JS Files -->
-    <script src="../assets/js/bootstrap.bundle.min.js"></script>
+    <!-- CDN JS Files -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="../js/firebase-config.js"></script>
-    <script type="module" src="../js/auth-simple.js"></script>
+    <script type="module" src="../js/auth.js"></script>
     <script type="module" src="../js/face-simple.js"></script>
     <script type="module" src="../js/biometric-simple.js"></script>
     
     <script type="module">
-        // Simple form handling for demo
-        import { registerVoter } from '../js/auth-simple.js';
+        import { registerVoter } from '../js/auth.js';
         import { startCamera, captureFace } from '../js/face-simple.js';
+        
+        let isCameraStarted = false;
         
         document.getElementById('registrationForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -117,21 +127,52 @@
             const fullName = document.getElementById('fullName').value;
             const voterId = document.getElementById('voterId').value;
             
+            if (password !== document.getElementById('confirmPassword').value) {
+                alert('Passwords do not match!');
+                return;
+            }
+            
             const voterData = {
                 fullName: fullName,
                 voterId: voterId
             };
             
-            await registerVoter(email, password, voterData);
+            const result = await registerVoter(email, password, voterData);
+            if (result.success) {
+                alert('Registration successful! You can now login.');
+                window.location.href = 'login.html';
+            }
         });
         
-        // Start camera when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            startCamera('videoElement');
+        // Camera controls
+        document.getElementById('startCamera').addEventListener('click', async () => {
+            try {
+                await startCamera('videoElement');
+                isCameraStarted = true;
+                document.getElementById('captureFace').disabled = false;
+                document.getElementById('cameraStatus').textContent = 'Camera started - Ready to capture face';
+                document.getElementById('cameraStatus').className = 'mt-2 text-center small text-success';
+            } catch (error) {
+                document.getElementById('cameraStatus').textContent = 'Error starting camera: ' + error.message;
+                document.getElementById('cameraStatus').className = 'mt-2 text-center small text-danger';
+            }
         });
         
         document.getElementById('captureFace').addEventListener('click', async () => {
-            await captureFace();
+            if (!isCameraStarted) {
+                alert('Please start the camera first!');
+                return;
+            }
+            
+            try {
+                await captureFace();
+                document.getElementById('registerBiometric').disabled = false;
+                document.getElementById('cameraStatus').textContent = 'Face captured successfully!';
+                document.getElementById('cameraStatus').className = 'mt-2 text-center small text-success';
+            } catch (error) {
+                document.getElementById('cameraStatus').textContent = 'Error capturing face: ' + error.message;
+                document.getElementById('cameraStatus').className = 'mt-2 text-center small text-danger';
+            }
         });
     </script>
 </body>
