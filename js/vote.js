@@ -302,8 +302,11 @@ async function castVote() {
 }
 
 // Initialize admin dashboard
+// Initialize admin dashboard - FIXED VERSION
 export async function initAdminDashboard() {
     try {
+        console.log('Initializing admin dashboard...');
+        
         // Show loading
         const authCheck = document.getElementById('authCheck');
         const adminContent = document.getElementById('adminContent');
@@ -311,13 +314,40 @@ export async function initAdminDashboard() {
         if (authCheck) authCheck.style.display = 'block';
         if (adminContent) adminContent.style.display = 'none';
         
-        auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                // Check if user is actually admin
-                const userIsAdmin = await isAdmin(user.uid);
+        // Check auth state with timeout
+        const authCheckPromise = new Promise((resolve, reject) => {
+            const unsubscribe = auth.onAuthStateChanged(async (user) => {
+                unsubscribe(); // Clean up listener
+                resolve(user);
+            });
+            
+            // Timeout after 10 seconds
+            setTimeout(() => {
+                unsubscribe();
+                reject(new Error('Authentication check timeout'));
+            }, 10000);
+        });
+        
+        const user = await authCheckPromise;
+        
+        if (user) {
+            console.log('User authenticated:', user.uid);
+            
+            try {
+                // Check if user is admin with timeout
+                const adminCheckPromise = Promise.race([
+                    isAdmin(user.uid),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Admin check timeout')), 5000)
+                    )
+                ]);
+                
+                const userIsAdmin = await adminCheckPromise;
                 const userData = await getVoterData(user.uid);
                 
                 if (userIsAdmin && userData.success) {
+                    console.log('User is admin, loading dashboard...');
+                    
                     // User is admin, show dashboard
                     if (authCheck) authCheck.style.display = 'none';
                     if (adminContent) adminContent.style.display = 'block';
@@ -329,40 +359,101 @@ export async function initAdminDashboard() {
                         adminWelcome.textContent = `Welcome, ${adminName}`;
                     }
                     
-                    await loadAdminData();
-                    setupAdminEventListeners();
-                } else {
-                    // User is not admin, redirect to appropriate page
-                    if (authCheck) authCheck.style.display = 'none';
+                    // Load admin data (don't wait for it to complete)
+                    loadAdminData().catch(error => {
+                        console.error('Error loading admin data:', error);
+                        // Show error but don't block the UI
+                        showDataError();
+                    });
                     
-                    if (userData.success && userData.data.role === 'voter') {
-                        // Voter trying to access admin - redirect to vote page
-                        alert('Access denied. Voters cannot access admin panel.');
-                        window.location.href = 'vote.html';
-                    } else {
-                        // No role assigned or other issue - redirect to admin registration
-                        const createAdmin = confirm('You do not have admin privileges. Would you like to create an admin account?');
-                        if (createAdmin) {
-                            window.location.href = 'admin-register.html';
-                        } else {
-                            window.location.href = '../index.html';
-                        }
-                    }
-                }
-            } else {
-                // No user logged in
-                if (authCheck) authCheck.style.display = 'none';
-                const loginFirst = confirm('Please login to access admin panel. Would you like to login now?');
-                if (loginFirst) {
-                    window.location.href = 'login.html';
+                    setupAdminEventListeners();
+                    
                 } else {
-                    window.location.href = '../index.html';
+                    // User is not admin
+                    console.log('User is not admin, redirecting...');
+                    handleNonAdminRedirect(userData);
                 }
+                
+            } catch (error) {
+                console.error('Error during admin check:', error);
+                // If admin check fails, still show dashboard but with limited functionality
+                if (authCheck) authCheck.style.display = 'none';
+                if (adminContent) adminContent.style.display = 'block';
+                
+                showDataError();
+                setupAdminEventListeners();
             }
-        });
+            
+        } else {
+            // No user logged in
+            console.log('No user logged in, redirecting to login...');
+            handleNoUserRedirect();
+        }
+        
     } catch (error) {
         console.error('Error initializing admin dashboard:', error);
-        alert('Error loading admin dashboard. Please refresh the page.');
+        
+        // Show error state but don't block completely
+        const authCheck = document.getElementById('authCheck');
+        const adminContent = document.getElementById('adminContent');
+        
+        if (authCheck) authCheck.style.display = 'none';
+        if (adminContent) adminContent.style.display = 'block';
+        
+        showDataError();
+        setupAdminEventListeners();
+    }
+}
+
+// Helper function for non-admin users
+function handleNonAdminRedirect(userData) {
+    const authCheck = document.getElementById('authCheck');
+    if (authCheck) authCheck.style.display = 'none';
+    
+    if (userData.success && userData.data.role === 'voter') {
+        alert('Access denied. Voters cannot access admin panel.');
+        window.location.href = 'vote.html';
+    } else {
+        const createAdmin = confirm('You do not have admin privileges. Would you like to create an admin account?');
+        if (createAdmin) {
+            window.location.href = 'admin-register.html';
+        } else {
+            window.location.href = '../index.html';
+        }
+    }
+}
+
+// Helper function for no user
+function handleNoUserRedirect() {
+    const authCheck = document.getElementById('authCheck');
+    if (authCheck) authCheck.style.display = 'none';
+    
+    const loginFirst = confirm('Please login to access admin panel. Would you like to login now?');
+    if (loginFirst) {
+        window.location.href = 'login.html';
+    } else {
+        window.location.href = '../index.html';
+    }
+}
+
+// Show data error message
+function showDataError() {
+    // You can add a banner or alert showing data load issues
+    console.warn('Some data failed to load due to permissions');
+    // Optionally show a user-friendly message
+    const existingAlert = document.getElementById('dataErrorAlert');
+    if (!existingAlert) {
+        const alert = document.createElement('div');
+        alert.id = 'dataErrorAlert';
+        alert.className = 'alert alert-warning alert-dismissible fade show';
+        alert.innerHTML = `
+            <strong>Note:</strong> Some data may not load due to permission settings. 
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        const adminContent = document.getElementById('adminContent');
+        if (adminContent) {
+            adminContent.insertBefore(alert, adminContent.firstChild);
+        }
     }
 }
 
@@ -379,7 +470,7 @@ async function loadAdminData() {
     }
 }
 
-// Load voter statistics
+// Load voter statistics - FIXED
 async function loadVoterStats() {
     try {
         const votersSnapshot = await getDocs(collection(db, "voters"));
@@ -397,15 +488,32 @@ async function loadVoterStats() {
         if (votesCastEl) votesCastEl.textContent = votedVoters;
         if (remainingVotersEl) remainingVotersEl.textContent = totalVoters - votedVoters;
         
-        const candidatesSnapshot = await getDocs(collection(db, "candidates"));
-        if (totalCandidatesEl) totalCandidatesEl.textContent = candidatesSnapshot.size;
+        // Try to load candidates count
+        try {
+            const candidatesSnapshot = await getDocs(collection(db, "candidates"));
+            if (totalCandidatesEl) totalCandidatesEl.textContent = candidatesSnapshot.size;
+        } catch (candidateError) {
+            console.warn('Could not load candidates count:', candidateError);
+            if (totalCandidatesEl) totalCandidatesEl.textContent = 'N/A';
+        }
         
     } catch (error) {
         console.error('Error loading voter stats:', error);
+        
+        // Set fallback values
+        const totalVotersEl = document.getElementById('totalVoters');
+        const votesCastEl = document.getElementById('votesCast');
+        const remainingVotersEl = document.getElementById('remainingVoters');
+        const totalCandidatesEl = document.getElementById('totalCandidates');
+        
+        if (totalVotersEl) totalVotersEl.textContent = 'N/A';
+        if (votesCastEl) votesCastEl.textContent = 'N/A';
+        if (remainingVotersEl) remainingVotersEl.textContent = 'N/A';
+        if (totalCandidatesEl) totalCandidatesEl.textContent = 'N/A';
     }
 }
 
-// Load candidates for admin table
+// Load candidates for admin table - FIXED
 async function loadCandidatesTable() {
     try {
         const querySnapshot = await getDocs(collection(db, "candidates"));
@@ -440,21 +548,24 @@ async function loadCandidatesTable() {
                     <td>${candidate.position}</td>
                     <td><strong>${candidate.votes || 0}</strong></td>
                     <td>
-                        <button class="btn btn-sm btn-outline-primary me-1" onclick="editCandidate('${doc.id}')">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteCandidate('${doc.id}')">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        <span class="text-muted">View Only</span>
                     </td>
                 </tr>
             `;
         });
+        
     } catch (error) {
         console.error('Error loading candidates table:', error);
         const tableBody = document.getElementById('candidatesTable');
         if (tableBody) {
-            tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading candidates</td></tr>';
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center text-muted">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Cannot load candidates data
+                    </td>
+                </tr>
+            `;
         }
     }
 }
