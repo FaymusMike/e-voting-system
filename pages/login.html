@@ -105,12 +105,21 @@
             try {
                 const result = await loginVoter(email, password);
                 if (result.success) {
-                    // Redirect based on role
-                    redirectBasedOnRole(result.role, result.fullName);
+                    console.log('Login successful, role:', result.role);
+                    
+                    // Use direct redirect instead of the broken function
+                    if (result.role === 'admin') {
+                        sessionStorage.setItem('adminName', result.fullName);
+                        window.location.href = './admin.html';  // ← FIXED
+                    } else {
+                        sessionStorage.setItem('voterName', result.fullName);
+                        window.location.href = './vote.html';   // ← FIXED
+                    }
                 } else {
                     alert('Login failed: ' + result.error);
                 }
             } catch (error) {
+                console.error('Login error:', error);
                 alert('Login error: ' + error.message);
             } finally {
                 loginBtn.innerHTML = originalText;
@@ -119,33 +128,23 @@
         });
         
         // Handle face login
-        document.getElementById('faceLogin').addEventListener('click', async () => {
-            const container = document.getElementById('faceLoginContainer');
-            container.style.display = container.style.display === 'none' ? 'block' : 'none';
-            
-            if (container.style.display === 'block') {
-                try {
-                    await startCamera('loginVideoElement');
-                } catch (error) {
-                    alert('Error starting camera: ' + error.message);
-                }
-            }
-        });
-        
         document.getElementById('verifyFace').addEventListener('click', async () => {
             try {
                 await captureFace();
-                alert('Face verification successful! For demo, redirecting as voter.');
-                redirectBasedOnRole('voter', 'Demo User');
+                alert('Face verification successful! Redirecting to voting...');
+                // For demo, redirect as voter
+                sessionStorage.setItem('voterName', 'Demo User');
+                window.location.href = './vote.html';  // ← FIXED
             } catch (error) {
                 alert('Face verification failed: ' + error.message);
             }
         });
-        
-        // Handle biometric login
+
+        // Handle biometric login - FIXED
         document.getElementById('biometricLogin').addEventListener('click', async () => {
             alert('Biometric login would be implemented here. For demo, redirecting as voter.');
-            redirectBasedOnRole('voter', 'Demo User');
+            sessionStorage.setItem('voterName', 'Demo User');
+            window.location.href = './vote.html';  // ← FIXED
         });
     </script>
 </body>

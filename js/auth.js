@@ -195,15 +195,27 @@ export async function getUserRole(userId) {
     }
 }
 
-// Redirect user based on role
+// Redirect user based on role - FIXED PATHS
 export function redirectBasedOnRole(role, fullName = 'User') {
-    if (role === 'admin') {
-        // Store admin info in session storage
-        sessionStorage.setItem('adminName', fullName);
-        window.location.href = 'pages/admin.html';
+    console.log('Redirecting based on role:', role);
+    
+    // Determine the correct base path
+    const currentPath = window.location.pathname;
+    let basePath = '';
+    
+    if (currentPath.includes('/pages/')) {
+        // We're already in the pages folder
+        basePath = './';
     } else {
-        // Store voter info in session storage
+        // We're in the root, need to go to pages folder
+        basePath = 'pages/';
+    }
+    
+    if (role === 'admin') {
+        sessionStorage.setItem('adminName', fullName);
+        window.location.href = basePath + 'admin.html';
+    } else {
         sessionStorage.setItem('voterName', fullName);
-        window.location.href = 'pages/vote.html';
+        window.location.href = basePath + 'vote.html';
     }
 }
